@@ -1,0 +1,1 @@
+python cli.py debug examples\datasets\front_3d_with_improved_mat\my_main.py P:\irotate\3DFRONT\3D-FRONT\00ad8345-45e0-45b3-867d-4a3c88c2517a.json P:\irotate\3DFRONT\3D-FUTURE-model P:\irotate\3DFRONT\3D-FRONT-texture P:\irotate\cc_textures examples\datasets\front_3d\output\ --custom-blender-path=C:\Users\ebonetto\AppData\Local\ov\pkg\blender-3.1.0-usd.100.1.10\Release
