@@ -107,17 +107,29 @@ class Front3DLoader:
         """
         # extract the hash nr from the given url
         hash_nr = given_url.split("/")[-2]
+        if hash_nr == "material" or hash_nr== "resized" or "iso_" in hash_nr:
+            hash_nr = given_url.split("/")[-1][:-4]
+            warnings.warn(f"ERROR: {hash_nr} detected in name instead of hash, try with the name {hash_nr}")
         hash_folder = os.path.join(front_3D_texture_path, hash_nr)
-        if not os.path.exists(hash_folder):
+        if not os.path.exists(hash_folder): 
             # download the file
             os.makedirs(hash_folder)
-            warnings.warn(f"This texture: {hash_nr} could not be found it will be downloaded.")
+        if len(os.listdir(hash_folder))==0:
+            warnings.warn(f"ERROR: This texture: {hash_nr} could not be found it will be downloaded.")
             # replace https with http as ssl connection out of blender are difficult
-            urlretrieve(given_url.replace("https://", "http://"), os.path.join(hash_folder, "texture.png"))
-            if not os.path.exists(os.path.join(hash_folder, "texture.png")):
-                raise Exception(f"The texture could not be found, the following url was used: "
-                                f"{front_3D_texture_path}, this is the extracted hash: {hash_nr}, "
-                                f"given url: {given_url}")
+            try:
+                urlretrieve(given_url.replace("https://", "http://"), os.path.join(hash_folder, "texture.png"))
+            except:
+                try:
+                    warnings.warn(f"ERROR: using different url here for {given_url} {hash_folder}")
+                    given_url = given_url.replace("juran-prod-assets.s3.cn-north-1.amazonaws.com.cn", "jr-prod-pim-products.oss-cn-beijing.aliyuncs.com")
+                    urlretrieve(given_url.replace("https://", "http://"), os.path.join(hash_folder, "texture.png"))
+                except:
+                    warnings.warn(f"ERROR: cannot download asset for whatever reason, check {hash_folder}")
+        if not os.path.exists(os.path.join(hash_folder, "texture.png")) and not os.path.exists(os.path.join(hash_folder, "texture.jpg")):
+            raise Exception(f"The texture could not be found, the following url was used: "
+                            f"{front_3D_texture_path}, this is the extracted hash: {hash_nr}, "
+                            f"given url: {given_url}")
         return hash_folder
 
     @staticmethod
@@ -135,7 +147,7 @@ class Front3DLoader:
         else:
             textures = load_texture(hash_folder_path)
             if len(textures) != 1:
-                raise Exception(f"There is not just one texture: {len(textures)}")
+                raise Exception(f"There is not just one texture: {len(textures)} within {hash_folder_path}")
             ret_used_image = textures[0].image
             saved_image_dict[hash_folder_path] = ret_used_image
         return ret_used_image
@@ -206,40 +218,68 @@ class Front3DLoader:
             if used_mat:
                 if used_mat["texture"]:
                     # extract the has folder is from the url and download it if necessary
-                    hash_folder = Front3DLoader._extract_hash_nr_for_texture(used_mat["texture"], front_3D_texture_path)
-                    if hash_folder in used_materials_based_on_texture and "ceiling" not in used_obj_name.lower():
-                        mat = used_materials_based_on_texture[hash_folder]
-                        obj.add_material(mat)
-                    else:
-                        # Create a new material
-                        mat = MaterialLoaderUtility.create(name=used_obj_name + "_material")
-                        principled_node = mat.get_the_one_node_with_type("BsdfPrincipled")
-                        if used_mat["color"]:
-                            principled_node.inputs["Base Color"].default_value = mathutils.Vector(used_mat["color"]) / 255.0
+                    try:
+                        hash_folder = Front3DLoader._extract_hash_nr_for_texture(used_mat["texture"], front_3D_texture_path)
+                        if hash_folder in used_materials_based_on_texture and "ceiling" not in used_obj_name.lower():
+                            mat = used_materials_based_on_texture[hash_folder]
+                            obj.add_material(mat)
+                        else:
+                            # Create a new material
+                            mat = MaterialLoaderUtility.create(name=used_obj_name + "_material")
+                            principled_node = mat.get_the_one_node_with_type("BsdfPrincipled")
+                            if used_mat["color"]:
+                                principled_node.inputs["Base Color"].default_value = mathutils.Vector(used_mat["color"]) / 255.0
 
-                        used_image = Front3DLoader._get_used_image(hash_folder, saved_images)
-                        mat.set_principled_shader_value("Base Color", used_image)
+                            used_image = Front3DLoader._get_used_image(hash_folder, saved_images)
+                            mat.set_principled_shader_value("Base Color", used_image)
 
-                        if "ceiling" in used_obj_name.lower():
-                            mat.make_emissive(ceiling_light_strength, emission_color=mathutils.Vector(used_mat["color"]) / 255.0)
+                            if "ceiling" in used_obj_name.lower():
+                                mat.make_emissive(ceiling_light_strength, emission_color=mathutils.Vector(used_mat["color"]) / 255.0)
 
-                        if used_mat["normaltexture"]:
-                            # get the used image based on the normal texture path
-                            # extract the has folder is from the url and download it if necessary
-                            hash_folder = Front3DLoader._extract_hash_nr_for_texture(used_mat["normaltexture"],
-                                                                                     front_3D_texture_path)
-                            used_image = Front3DLoader._get_used_image(hash_folder, saved_normal_images)
+                            if used_mat["normaltexture"]:
+                                # get the used image based on the normal texture path
+                                # extract the has folder is from the url and download it if necessary
+                                try:
+                                    hash_folder = Front3DLoader._extract_hash_nr_for_texture(used_mat["normaltexture"],
+                                                                                             front_3D_texture_path)
+                                    used_image = Front3DLoader._get_used_image(hash_folder, saved_normal_images)
 
-                            # create normal texture
-                            normal_texture = MaterialLoaderUtility.create_image_node(mat.nodes, used_image, True)
-                            normal_map = mat.nodes.new("ShaderNodeNormalMap")
-                            normal_map.inputs["Strength"].default_value = 1.0
-                            mat.links.new(normal_texture.outputs["Color"], normal_map.inputs["Color"])
-                            # connect normal texture to principled shader
-                            mat.set_principled_shader_value("Normal", normal_map.outputs["Normal"])
-
+                                    # create normal texture
+                                    normal_texture = MaterialLoaderUtility.create_image_node(mat.nodes, used_image, True)
+                                    normal_map = mat.nodes.new("ShaderNodeNormalMap")
+                                    normal_map.inputs["Strength"].default_value = 1.0
+                                    mat.links.new(normal_texture.outputs["Color"], normal_map.inputs["Color"])
+                                    # connect normal texture to principled shader
+                                    mat.set_principled_shader_value("Normal", normal_map.outputs["Normal"])
+                                except:
+                                    print(f"ERROR: normaltexture with environment {json_path}. NOT USING IT!")
+                                    continue
                         obj.add_material(mat)
                         used_materials_based_on_texture[hash_folder] = mat
+                    except:
+                        warnings.warn(f"ERROR: texture/normaltexture with env {json_path} using color")
+                        try:
+                            used_hash = tuple(used_mat["color"])
+                        except:
+                            warnings.warn("Also no color")
+                        used_hash = tuple([255,255,255,255])
+                        if used_hash in used_materials_based_on_color and "ceiling" not in used_obj_name.lower():
+                            mat = used_materials_based_on_color[used_hash]
+                        else:
+                            # Create a new material
+                            mat = MaterialLoaderUtility.create(name=used_obj_name + "_material")
+                            # create a principled node and set the default color
+                            principled_node = mat.get_the_one_node_with_type("BsdfPrincipled")
+                            principled_node.inputs["Base Color"].default_value = mathutils.Vector(used_mat["color"]) / 255.0
+                            # if the object is a ceiling add some light output
+                            if "ceiling" in used_obj_name.lower():
+                                mat.make_emissive(ceiling_light_strength, emission_color=mathutils.Vector(used_mat["color"]) / 255.0)
+                            else:
+                                used_materials_based_on_color[used_hash] = mat
+
+                        # as this material was just created the material is just append it to the empty list
+                        obj.add_material(mat)
+                        continue
                 # if there is a normal color used
                 elif used_mat["color"]:
                     used_hash = tuple(used_mat["color"])
@@ -311,8 +351,7 @@ class Front3DLoader:
                 mesh.uv_layers.new(name="new_uv_layer")
                 mesh.uv_layers[-1].data.foreach_set("uv", used_uvs)
             else:
-                warnings.warn(f"This mesh {obj.name} does not have a specified uv map!")
-
+                warnings.warn(f"This mesh {used_obj_name} does not have a specified uv map!")
             # this update converts the upper data into a mesh
             mesh.update()
 
@@ -352,6 +391,7 @@ class Front3DLoader:
             if os.path.exists(obj_file) and not "7e101ef3-7722-4af8-90d5-7c562834fabd" in obj_file:
                 # load all objects from this .obj file
                 objs = load_obj(filepath=obj_file)
+
                 # extract the name, which serves as category id
                 used_obj_name = ""
                 refined_cat = ''
@@ -366,10 +406,25 @@ class Front3DLoader:
                             used_obj_name = used_obj_name.split("/")[0]
                 if used_obj_name == "":
                     used_obj_name = "others"
+                
                 for obj in objs:
                     obj.set_name(used_obj_name)
                     # add some custom properties
                     obj.set_cp("uid", ele["uid"])
+                    need_to_change = False
+                    try:
+                        need_to_change = obj.get_bound_box_volume() / (ele['size'][0]*ele['size'][1]*ele['size'][2]) > 3
+                    except:
+                        pass
+                        
+                    try:
+                        need_to_change = obj.get_bound_box_volume() / (ele['bbox'][0]*ele['bbox'][1]*ele['bbox'][2]) > 3
+                    except:
+                        pass
+                        
+                    if obj.get_bound_box_volume() > 100 or need_to_change:
+                        obj.set_scale([0.01,0.01,0.01])
+                        warnings.warn(f"ATTENTION: changing scale of object {obj.blender_obj.name} to {[0.01,0.01,0.01]} since an error occured")
                     
                     # this custom property determines if the object was used before
                     # is needed to only clone the second appearance of this object
@@ -403,11 +458,25 @@ class Front3DLoader:
                         # For each a texture node
                         image_node = mat.new_node('ShaderNodeTexImage')
                         # and load the texture.png
-                        base_image_path = os.path.join(folder_path, "texture.png")
+                        my_textures = os.listdir(folder_path)
+                        if "texture.png" in my_textures:
+                            base_image_path = os.path.join(folder_path, "texture.png")
+                        elif "texture.jpg" in my_textures:
+                            base_image_path = os.path.join(folder_path, "texture.jpg")
+                        else:
+                            warnings.warn(f"ERROR: IN {folder_path} TEXTURE NOT EXIST!")                            
                         image_node.image = bpy.data.images.load(base_image_path, check_existing=True)
                         mat.link(image_node.outputs['Color'], principled_node.inputs['Base Color'])
-
-                all_objs.extend(objs)
+                if len(objs) > 1:
+                    bpy.ops.object.select_all(action='DESELECT')
+                    for ob in objs:
+                        ob.blender_obj.select_set(True)
+                        bpy.context.view_layer.objects.active = ob.blender_obj
+                        lo = [ob]
+                    bpy.ops.object.join()
+                    all_objs.extend(lo)
+                else:
+                    all_objs.extend(objs)
             elif "7e101ef3-7722-4af8-90d5-7c562834fabd" in obj_file:
                 warnings.warn(f"This file {obj_file} was skipped as it can not be read by blender.")
         return all_objs
@@ -455,47 +524,29 @@ class Front3DLoader:
                             new_obj.set_cp("coarse_grained_class", new_obj.get_cp("category_id"))
                             # this flips the y and z coordinate to bring it to the blender coordinate system
                             new_obj.set_location(mathutils.Vector(child["pos"]).xzy)
-                            new_obj.set_scale(child["scale"])
+                            new_obj.set_scale(obj.get_scale())
                             # extract the quaternion and convert it to a rotation matrix
                             rotation_mat = mathutils.Quaternion(child["rot"]).to_euler().to_matrix().to_4x4()
                             # transform it into the blender coordinate system and then to an euler
                             new_obj.set_rotation_euler((blender_rot_mat @ rotation_mat).to_euler())
                             
-                            if new_obj.get_cp("uid") == prev_uid:
-                                equal_objs[-1].append(new_obj)
-                            else:
-                                equal_objs.append([new_obj])
-                                prev_uid = new_obj.get_cp("uid")
-        for i in equal_objs:
-            if len(i) == 1:
-                created_objects.append(i[0])
-                bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+                            created_objects.append(new_obj)
 
-            else:
-                for obj in bpy.context.selected_objects:
-                    obj.select_set(False)
-                
-                if i[0].blender_obj.type == "MESH":
-                    bpy.context.view_layer.objects.active = None
-                    print(i[0].blender_obj.name)
-                    for obj in i:
-                        obj.blender_obj.select_set(True)
-
-                    bpy.context.view_layer.objects.active = i[0].blender_obj
-                    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
-
-                    created_objects.append(i[0])
-                    print("JOINED")
-                    bpy.ops.object.join()
-
-            used_obj_name = i[0].blender_obj.name
+        
+        for i in created_objects:
+            bpy.ops.object.select_all(action='DESELECT')
+            used_obj_name = i.blender_obj.name
             is_lamp = "lamp" in used_obj_name.lower() or "lighting" in used_obj_name.lower() 
             if is_lamp:
+                i.blender_obj.select_set(True)
+                bpy.context.view_layer.objects.active = i.blender_obj
+                bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+                
                 #mat.make_emissive(lamp_light_strength)
                 light_data = bpy.data.lights.new(name="Lamp"+str(used_obj_name), type='POINT')
-                light_data.color = [0.0, 0.0, 0.0] if not random_light_color else [random.random(), random.random(), random.random()] # rgb / 255.0
-                light_data.energy = 100 if not random_light_intensity else random.randint(10,1000)
+                light_data.color = [1.0, 1.0, 1.0] if not random_light_color else [random.random(), random.random(), random.random()] # rgb / 255.0
+                light_data.energy = 100 if not random_light_intensity else random.randint(10,400)
                 light_object = bpy.data.objects.new(name="Lamp"+str(used_obj_name), object_data=light_data)
                 bpy.context.collection.objects.link(light_object)
-                light_object.parent = i[0].blender_obj
+                light_object.parent = i.blender_obj
         return created_objects

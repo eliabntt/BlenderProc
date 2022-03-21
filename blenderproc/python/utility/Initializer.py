@@ -14,7 +14,7 @@ import addon_utils
 import blenderproc.python.renderer.RendererUtility as RendererUtility
 
 
-def init(horizon_color: list = [0.05, 0.05, 0.05], compute_device: str = "GPU", compute_device_type: str = None, use_experimental_features: bool = False, clean_up_scene: bool = True):
+def init(horizon_color: list = [0.05, 0.05, 0.05], compute_device: str = "GPU", compute_device_type: str = None, use_experimental_features: bool = False, clean_up_scene: bool = True, whitelist = []):
     """ Initializes basic blender settings, the world and the camera.
 
     Also cleans up the whole scene at first.
@@ -26,7 +26,7 @@ def init(horizon_color: list = [0.05, 0.05, 0.05], compute_device: str = "GPU", 
     :param clean_up_scene: Set to False, if you want to keep all scene data.
     """
     if clean_up_scene:
-        cleanup()
+        cleanup(whitelist)
 
     # Set language if necessary
     if bpy.context.preferences.view.language != "en_US":
@@ -112,19 +112,22 @@ def init(horizon_color: list = [0.05, 0.05, 0.05], compute_device: str = "GPU", 
         random.seed(random_seed)
         np_random.seed(random_seed)
 
-def cleanup():
+def cleanup(whitelist):
     """ Resets the scene to its clean state, but keeping the UI as it is """
     # Switch to right context
     if bpy.context.object is not None and bpy.context.object.mode != "OBJECT":
         bpy.ops.object.mode_set(mode='OBJECT')
 
     # Clean up
-    Initializer._remove_all_data()
+    Initializer._remove_all_data(whitelist)
     Initializer._remove_custom_properties()
 
     # Create new world
     new_world = bpy.data.worlds.new("World")
     bpy.context.scene.world = new_world
+
+def get_whitelist():
+    return Initializer._get_all_data()
 
 class Initializer:
 
@@ -164,7 +167,7 @@ class Initializer:
 
 
     @staticmethod
-    def _remove_all_data():
+    def _remove_all_data(whitelist):
         """ Remove all data blocks except opened scripts and the default scene. """
         # Go through all attributes of bpy.data
         for collection in dir(bpy.data):
@@ -174,8 +177,25 @@ class Initializer:
                 # Go over all entities in that collection
                 for block in data_structure:
                     # Remove everything besides the default scene
+                    if block in whitelist:
+                        continue
                     if not isinstance(block, bpy.types.Scene) or block.name != "Scene":
                         data_structure.remove(block)
+    
+    @staticmethod
+    def _get_all_data():
+        """ Get all data blocks except opened scripts and the default scene. """
+        # Go through all attributes of bpy.data
+        my_data = []
+        for collection in dir(bpy.data):
+            data_structure = getattr(bpy.data, collection)
+            # Check that it is a data collection
+            if isinstance(data_structure, bpy.types.bpy_prop_collection) and hasattr(data_structure, "remove") and collection not in ["texts"]:
+                # Go over all entities in that collection
+                for block in data_structure:
+                    if not isinstance(block, bpy.types.Scene) or block.name != "Scene":
+                        my_data.append(block)
+        return my_data
 
     @staticmethod
     def _remove_custom_properties():
