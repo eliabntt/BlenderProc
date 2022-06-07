@@ -1,5 +1,7 @@
 from blenderproc.python.utility.SetupUtility import SetupUtility
 
+
+import torch
 import glob
 import json
 import os
@@ -14,11 +16,10 @@ import numpy as np
 from blenderproc.python.types.MeshObjectUtility import MeshObject
 from blenderproc.python.utility.Utility import Utility
 from blenderproc.python.loader.ObjectLoader import load_obj
+from blenderproc.python.utility.IO import writePC2
 
-
-def load_AMASS(data_path: str, sub_dataset_id: str, temp_dir: str = None, body_model_gender: str = None,
-               subject_id: str = "", sequence_id: int = -1, frame_id: int = -1, num_betas: int = 10,
-               num_dmpls: int = 8) -> List[MeshObject]:
+def load_AMASS_seq(data_path: str, sub_dataset_id: str, temp_dir: str = None, body_model_gender: str = None,
+               subject_id: str = "", sequence_id: int = -1, num_betas: int = 10, num_dmpls: int = 8):
     """
     use the pose parameters to generate the mesh and loads it to the scene.
 
@@ -33,7 +34,6 @@ def load_AMASS(data_path: str, sub_dataset_id: str, temp_dir: str = None, body_m
                             If left empty a random subject id is picked.
     :param sequence_id: Sequence id in the dataset, sequences are the motion recorded to represent certain action.
                              If set to -1 a random sequence id is selected.
-    :param frame_id: Frame id in a selected motion sequence. If none is selected a random one is picked
     :param num_betas: Number of body parameters
     :param num_dmpls: Number of DMPL parameters
     :return: The list of loaded mesh objects.
@@ -50,42 +50,44 @@ def load_AMASS(data_path: str, sub_dataset_id: str, temp_dir: str = None, body_m
     taxonomy_file_path = os.path.join(data_path, "taxonomy.json")
     supported_mocap_datasets = AMASSLoader._get_supported_mocap_datasets(taxonomy_file_path, data_path)
 
-## todo loop through these
     # selected_obj = self._files_with_fitting_ids
-    pose_body, betas = AMASSLoader._get_pose_parameters(supported_mocap_datasets, num_betas, sub_dataset_id, subject_id, sequence_id, frame_id)
-    # load parametric Model
-    body_model, faces = AMASSLoader._load_parametric_body_model(data_path, body_model_gender, num_betas, num_dmpls)
-    # Generate Body representations using SMPL model
-    body_repr = body_model(pose_body=pose_body, betas=betas)
-    import ipdb;
-    ipdb.set_trace()
-    ### get body repr verteces
-    ### write pc2
-    ### Load pc2 in the other code and try 
+    sequence_path, main_path = AMASSLoader._get_sequence_path(supported_mocap_datasets, sub_dataset_id, subject_id, sequence_id)
+    if os.path.exists(sequence_path):
+        # load AMASS dataset sequence file which contains the coefficients for the whole motion sequence
+        sequence_body_data = np.load(sequence_path)
+        # get the number of supported frames
+        no_of_frames_per_sequence = sequence_body_data['poses'].shape[0]
+    else:
+        raise Exception(
+            "Invalid sequence/subject: {} category identifiers, please choose a "
+            "valid one. Used path: {}".format(used_subject_id, sequence_path))
     
-    # Generate .obj file represents the selected pose
-    generated_obj = AMASSLoader._write_body_mesh_to_obj_file(body_repr, faces, temp_dir)
+    pc2_path = os.path.join(main_path,'cache',
+        str(sequence_id) + "_" + body_model_gender + '.pc2'
+    )
+    if not os.path.exists(os.path.join(main_path,'cache')):
+        os.mkdir(os.path.join(main_path,'cache'))
+    V = np.zeros((no_of_frames_per_sequence, 6890, 3), np.float32)
 
-    loaded_obj = load_obj(generated_obj)
+    bdata = sequence_body_data
+    time_length = len(bdata['trans'])
+    comp_device = "cpu"
+    body_params = {
+        'root_orient': torch.Tensor(bdata['poses'][:, :3]).to(comp_device), # controls the global root orientation
+        'pose_body': torch.Tensor(bdata['poses'][:, 3:66]).to(comp_device), # controls the body
+        'pose_hand': torch.Tensor(bdata['poses'][:, 66:]).to(comp_device), # controls the finger articulation
+        'trans': torch.Tensor(bdata['trans']).to(comp_device), # controls the global body position
+        'betas': torch.Tensor(np.repeat(bdata['betas'][:num_betas][np.newaxis], repeats=time_length, axis=0)).to(comp_device), # controls the body shape. Body shape is static
+        'dmpls': torch.Tensor(bdata['dmpls'][:, :num_dmpls]).to(comp_device) # controls soft tissue dynamics
+    }
 
-    AMASSLoader._correct_materials(loaded_obj)
-
-    # set the shading mode explicitly to smooth
-    for obj in loaded_obj:
-        obj.set_shading_mode("SMOOTH")
-
-    # removes the x axis rotation found in all ShapeNet objects, this is caused by importing .obj files
-    # the object has the same pose as before, just that the rotation_euler is now [0, 0, 0]
-    for obj in loaded_obj:
-        obj.persist_transformation_into_mesh(location=False, rotation=True, scale=False)
-
-    # move the origin of the object to the world origin and on top of the X-Y plane
-    # makes it easier to place them later on, this does not change the `.location`
-    for obj in loaded_obj:
-        obj.move_origin_to_bottom_mean_point()
-    bpy.ops.object.select_all(action='DESELECT')
-
-    return loaded_obj
+    if not os.path.isfile(pc2_path):
+        body_model, faces = AMASSLoader._load_parametric_body_model(data_path, body_model_gender, num_betas, num_dmpls)
+        body_trans_root = body_model(**{k:v for k,v in body_params.items() if k in ['pose_body', 'betas', 'pose_hand', 'dmpls',
+                                                               'trans', 'root_orient']})
+        V = body_trans_root.v.data.cpu().numpy()
+        print("Writing PC2 file...")
+        writePC2(pc2_path, V)
 
 class AMASSLoader:
     """
@@ -103,18 +105,15 @@ class AMASSLoader:
 
 
     @staticmethod
-    def _get_pose_parameters(supported_mocap_datasets: dict, num_betas: int, used_sub_dataset_id: str, used_subject_id: str, used_sequence_id: int, used_frame_id: int) -> Tuple["torch.Tensor", "torch.Tensor"]:
+    def _get_sequence_path(supported_mocap_datasets: dict, used_sub_dataset_id: str, used_subject_id: str, used_sequence_id: int) -> [str, str]:
         """ Extract pose and shape parameters corresponding to the requested pose from the database to be processed by the parametric model
 
         :param supported_mocap_datasets: A dict which maps sub dataset names to their paths.
-        :param num_betas: Number of body parameters
         :param used_sub_dataset_id: Identifier for the sub dataset, the dataset which the human pose object should be extracted from.
         :param used_subject_id: Type of motion from which the pose should be extracted, this is dataset dependent parameter.
         :param used_sequence_id: Sequence id in the dataset, sequences are the motion recorded to represent certain action.
-        :param used_frame_id: Frame id in a selected motion sequence. If none is selected a random one is picked
         :return: tuple of arrays contains the parameters. Type: tuple
         """
-        import torch
         # check if the sub_dataset is supported
         if used_sub_dataset_id in supported_mocap_datasets:
             # get path from dictionary
@@ -148,35 +147,7 @@ class AMASSLoader:
                 if "_" in used_subject_id_str else used_subject_id_str
             sequence_path = os.path.join(subject_path, used_subject_id_str_reduced +
                                          "_{:02d}_poses.npz".format(int(used_sequence_id)))
-            if os.path.exists(sequence_path):
-                # load AMASS dataset sequence file which contains the coefficients for the whole motion sequence
-                sequence_body_data = np.load(sequence_path)
-                # get the number of supported frames
-                no_of_frames_per_sequence = sequence_body_data['poses'].shape[0]
-                if used_frame_id < 0:
-                    frame_id = random.randint(0, no_of_frames_per_sequence)  # pick a random id
-                else:
-                    frame_id = used_frame_id
-                # Extract Body Model coefficients
-                if frame_id in range(0, no_of_frames_per_sequence):
-                    # use GPU to accelerate mesh calculations
-                    comp_device = torch.device( "cuda" if torch.cuda.is_available() else "cpu")
-                    # parameters that control the body pose
-                    # refer to http://files.is.tue.mpg.de/black/papers/amass.pdf, Section 3.1 for more information about the parameter representation and the below chosen values
-                    pose_body = torch.Tensor(sequence_body_data['poses'][frame_id:frame_id + 1, 3:66]).to(comp_device)
-                    # parameters that control the body shape
-                    betas = torch.Tensor(sequence_body_data['betas'][:num_betas][np.newaxis]).to(comp_device)
-                    return pose_body, betas
-                else:
-                    raise Exception(
-                        "Requested frame id is beyond sequence range, for the selected sequence, chooose frame id "
-                        "within the following range: [{}, {}]".format(0, no_of_frames_per_sequence))
-
-            else:
-                raise Exception(
-                    "Invalid sequence/subject: {} category identifiers, please choose a "
-                    "valid one. Used path: {}".format(used_subject_id, sequence_path))
-
+            return sequence_path, subject_path
         else:
             raise Exception(
                 "The requested mocap dataset is not yest supported, please choose anothe one from the following "
@@ -223,65 +194,3 @@ class AMASSLoader:
             raise Exception("The taxonomy file could not be found: {}".format(taxonomy_file_path))
 
         return supported_mocap_datasets
-
-
-    @staticmethod
-    def _write_body_mesh_to_obj_file(body_represenstation: "torch.Tensor", faces: np.array, temp_dir: str) -> str:
-        """ write the generated pose as obj file on the desk.
-
-        :param body_represenstation: parameters generated from the BodyModel model which represent the obj pose and shape. Type: torch.Tensor
-        :param faces: face parametric model which is used to generate the face mesh. Type: numpy.array
-        :return: path to generated obj file. Type: string.
-        """
-        # Generate temp object with name = timestamp
-        starttime = datetime.now().replace(microsecond=0)
-        obj_file_name = datetime.strftime(starttime, '%Y%m%d_%H%M') + ".obj"
-        # Write to an .obj file
-        outmesh_path = os.path.join(temp_dir, obj_file_name)
-        with open(outmesh_path, 'w') as fp:
-            fp.write("".join(['v {:f} {:f} {:f}\n'.format(v[0], v[1], v[2]) for v in body_represenstation.v[0].detach().cpu().numpy()]))
-            fp.write("".join(['f {} {} {}\n'.format(f[0], f[1], f[2]) for f in faces + 1]))
-        return outmesh_path
-
-    @staticmethod
-    def _correct_materials(objects: List[MeshObject]):
-        """ If the used material contains an alpha texture, the alpha texture has to be flipped to be correct
-
-        :param objects: Mesh objects where the material might be wrong.
-        """
-        for obj in objects:
-            for material in obj.get_materials():
-                if material is None:
-                    continue
-                # Create a principled node and set the default color
-                principled_bsdf = material.get_the_one_node_with_type("BsdfPrincipled")
-                # Pick random skin color value
-                skin_tone_hex = np.random.choice(AMASSLoader.human_skin_colors)
-                skin_tone_rgb = Utility.hex_to_rgba(skin_tone_hex)[:3]
-
-                # this is done to make the chance higher that the representation of skin tones is more diverse
-                skin_tone_fac = random.uniform(0.0, 1)
-                skin_tone_rgb = [value * skin_tone_fac for value in skin_tone_rgb]
-                principled_bsdf.inputs["Base Color"].default_value = mathutils.Vector([*skin_tone_rgb, 1.0])
-                principled_bsdf.inputs["Subsurface"].default_value = 0.2
-                principled_bsdf.inputs["Subsurface Color"].default_value = mathutils.Vector([*skin_tone_rgb, 1.0])
-
-                # darker skin looks better when made less specular
-                principled_bsdf.inputs["Specular"].default_value = np.mean(skin_tone_rgb) / 255.0
-
-                texture_nodes = material.get_nodes_with_type("ShaderNodeTexImage")
-                if texture_nodes and len(texture_nodes) > 1:
-                    # find the image texture node which is connect to alpha
-                    node_connected_to_the_alpha = None
-                    for node_links in principled_bsdf.inputs["Alpha"].links:
-                        if "ShaderNodeTexImage" in node_links.from_node.bl_idname:
-                            node_connected_to_the_alpha = node_links.from_node
-                    # if a node was found which is connected to the alpha node, add an invert between the two
-                    if node_connected_to_the_alpha is not None:
-                        invert_node = material.new_node("ShaderNodeInvert")
-                        invert_node.inputs["Fac"].default_value = 1.0
-                        material.insert_node_instead_existing_link(node_connected_to_the_alpha.outputs["Color"],
-                                                                  invert_node.inputs["Color"],
-                                                                  invert_node.outputs["Color"],
-                                                                  principled_bsdf.inputs["Alpha"])
-

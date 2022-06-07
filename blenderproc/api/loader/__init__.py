@@ -1,4 +1,5 @@
 from blenderproc.python.loader.AMASSLoader import load_AMASS
+from blenderproc.python.loader.AMASSLoadSeq import load_AMASS_seq
 from blenderproc.python.loader.BlendLoader import load_blend
 from blenderproc.python.loader.BopLoader import load_bop_objs, load_bop_scene, load_bop_intrinsics
 from blenderproc.python.loader.CCMaterialLoader import load_ccmaterials

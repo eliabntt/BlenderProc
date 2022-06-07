@@ -2,7 +2,7 @@
 {
   "version": 3,
   "setup": {
-    "blender_install_path": "/home_local/<env:USER>/blender/",
+    "custom_blender_path": "C:\\Users\\ebonetto\\AppData\\Local\\ov\\pkg\\blender-3.1.0-usd.100.1.10",
     "pip": [
       "h5py"
     ]
