@@ -20,30 +20,31 @@ import shutil
 import math
 from scipy.spatial import ConvexHull
 
-def export_environment(temp_filepath, filepath, limit_names = ["wall", "floor"]):
-    bpy.ops.wm.usd_export(filepath=temp_filepath,
-                          filemode=8, display_type='DEFAULT', sort_method='DEFAULT',
-                          selected_objects_only=False, visible_objects_only=False, export_animation=False,
-                          export_hair=True, export_vertices=True, export_vertex_colors=True,
-                          export_vertex_groups=False, export_face_maps=True, export_uvmaps=True, export_normals=True,
-                          export_transforms=True, export_materials=True, export_meshes=True, export_lights=True,
-                          export_cameras=False,
-                          export_curves=True, export_particles=True, export_armatures=False, use_instancing=False,
-                          evaluation_mode='VIEWPORT', default_prim_path="/world", root_prim_path="/world",
-                          material_prim_path="/world/materials",
-                          generate_cycles_shaders=False, generate_preview_surface=True, generate_mdl=True,
-                          convert_uv_to_st=True, convert_orientation=True,
-                          convert_to_cm=True, export_global_forward_selection='Y', export_global_up_selection='Z',
-                          export_child_particles=True,
-                          export_as_overs=False, merge_transform_and_shape=False, export_custom_properties=True,
-                          export_identity_transforms=False,
-                          apply_subdiv=True, author_blender_name=True, vertex_data_as_face_varying=False, frame_step=1,
-                          override_shutter=False,
-                          init_scene_frame_range=False, export_textures=False, relative_texture_paths=False,
-                          light_intensity_scale=1,
-                          convert_light_to_nits=True, scale_light_radius=True, convert_world_material=True)
+def export_environment(temp_filepath, filepath, export_usd=True, limit_names = ["wall", "floor"], join_all=True):
+    if export_usd:
+        bpy.ops.wm.usd_export(filepath=temp_filepath,
+                              filemode=8, display_type='DEFAULT', sort_method='DEFAULT',
+                              selected_objects_only=False, visible_objects_only=False, export_animation=False,
+                              export_hair=True, export_vertices=True, export_vertex_colors=True,
+                              export_vertex_groups=False, export_face_maps=True, export_uvmaps=True, export_normals=True,
+                              export_transforms=True, export_materials=True, export_meshes=True, export_lights=True,
+                              export_cameras=False,
+                              export_curves=True, export_particles=True, export_armatures=False, use_instancing=False,
+                              evaluation_mode='VIEWPORT', default_prim_path="/world", root_prim_path="/world",
+                              material_prim_path="/world/materials",
+                              generate_cycles_shaders=False, generate_preview_surface=True, generate_mdl=True,
+                              convert_uv_to_st=True, convert_orientation=True,
+                              convert_to_cm=True, export_global_forward_selection='Y', export_global_up_selection='Z',
+                              export_child_particles=True,
+                              export_as_overs=False, merge_transform_and_shape=False, export_custom_properties=True,
+                              export_identity_transforms=False,
+                              apply_subdiv=True, author_blender_name=True, vertex_data_as_face_varying=False, frame_step=1,
+                              override_shutter=False,
+                              init_scene_frame_range=False, export_textures=False, relative_texture_paths=False,
+                              light_intensity_scale=1,
+                              convert_light_to_nits=True, scale_light_radius=True, convert_world_material=True)
 
-    shutil.move(temp_filepath, filepath)
+        shutil.move(temp_filepath, filepath)
     filepath = filepath[:-3] + "x3d"
     bpy.ops.export_scene.x3d(filepath=filepath, use_selection=False, use_mesh_modifiers=True, use_normals=True,
                              use_hierarchy=True,
@@ -73,8 +74,6 @@ def export_environment(temp_filepath, filepath, limit_names = ["wall", "floor"])
                         if l[1] > MY: MY = l[1]
                         if l[2] < mz: mz = l[2]
                         if l[2] > MZ: MZ = l[2]
-                        if "floor" in obj.name.lower():
-                            if l[2] > fz: fz = l[2]
                     break
     if pts == []:
         print("ERROR considering all meshes to get points, will be very slow to compute hull")
@@ -90,9 +89,7 @@ def export_environment(temp_filepath, filepath, limit_names = ["wall", "floor"])
                     if l[1] > MY: MY = l[1]
                     if l[2] < mz: mz = l[2]
                     if l[2] > MZ: MZ = l[2]
-                    if "floor" in obj.name.lower():
-                        if l[2] > fz: fz = l[2]
-    
+                    
     hull = ConvexHull(pts)
     my_hull = []
     for i in hull.vertices:
@@ -120,12 +117,13 @@ def export_environment(temp_filepath, filepath, limit_names = ["wall", "floor"])
     np.save(filepath[:-3] + "npy", [mx, my, max(fz, mz), MX, MY, MZ, my_hull])
     print(filepath)
 
-    bpy.ops.object.select_by_type(type='MESH')
-    for obj in bpy.data.objects:
-        if obj.type == 'MESH':
-            bpy.context.view_layer.objects.active = obj
-            break
-    bpy.ops.object.join()
+bpy.ops.object.select_by_type(type='MESH')
+for obj in bpy.data.objects:
+    if obj.type == 'MESH':
+        bpy.context.view_layer.objects.active = obj
+        break
+    if join_all:
+        bpy.ops.object.join()
 
     bpy.ops.export_mesh.stl(filepath=filepath[:-3] + "stl", use_selection=True, global_scale=1, ascii=False,
                             use_mesh_modifiers=True, batch_mode='OFF', axis_forward='Y', axis_up='Z')

@@ -11,6 +11,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--env", help="Path to the env file")
 parser.add_argument("--output_dir", help="Path to where the data should be saved")
 parser.add_argument("--temp_dir", help="Path to where the data should be temporary saved")
+parser.add_argument("--export_usd", default="False", help="Wether to export the usd or not")
+parser.add_argument("--join_all", default="False", help="Wether to join all assets. Default to false to avoid crashes")
 parser.add_argument("--limit_names", default="",nargs='?', help="Obj names to be used for computing limits separated by space, if empty use \"floor\" and \"wall\"")
 args = parser.parse_args()
 
@@ -36,9 +38,9 @@ with open(os.path.join(env_out_dir, f"out.txt"), "w") as file_out, open(
         temp_filepath = os.path.join(args.temp_dir,os.path.basename(env)+".usd")
 
         if args.limit_names == "":
-            export_environment(temp_filepath, filepath)
+            export_environment(temp_filepath, filepath, args.export_usd != "False", join_all=(args.join_all != "False"))
         else:
-            export_environment(temp_filepath, filepath, split(args.limit_names))
+            export_environment(temp_filepath, filepath, args.export_usd != "False", str.split(args.limit_names), args.join_all != "False")
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete()
         succeed = True
