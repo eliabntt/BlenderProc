@@ -54,9 +54,17 @@ The STL file is not mandatory (you can disable it even within our code). Remembe
 
 The `npy` file with the limits of the environment (mainly used during placement and to limit the movement of the robot) can be easily manually created following [this](https://github.com/eliabntt/Front3D_to_USD/blob/c0e2e44cf88578dabefa043f6e390cc5fe4361fb/blenderproc/python/writer/WriterUtility.py#L117).
 
+### Convert x3d to octomap
+
+Install binvox from [here](https://www.patrickmin.com/binvox/)
+
+Run `./binvox -e myvox.wrl && binvox2bt myvox.binvox`
+
+See [here](https://www.patrickmin.com/binvox/) for additional options.
+
+You can visualize the octomap with `octovis myvox.binvox.bt`
 
 _____
-
 
 The list of influential changes is:
 - created `examples/datasets/front_3d_with_improved_mat/my_main.py` and `examples/datasets/front_3d/my_main.py`
