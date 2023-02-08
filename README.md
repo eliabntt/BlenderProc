@@ -57,7 +57,7 @@ The `npy` file with the limits of the environment (mainly used during placement 
 ### Convert x3d to octomap
 
 Get `binvox` from [here](https://www.patrickmin.com/binvox/)
-Install `sudo apt-get install -y xsltproc octomap-tools`
+Install `sudo apt-get install -y xsltproc octovis`
 
 Run 
 ```
