@@ -34,8 +34,8 @@ with open(os.path.join(env_out_dir, f"out.txt"), "w") as file_out, open(
         sys.stderr = file_err
         bpy.ops.import_scene.fbx(filepath=env)
 
-        filepath=os.path.join(env_out_dir,os.path.basename(env)+".usd")
-        temp_filepath = os.path.join(args.temp_dir,os.path.basename(env)+".usd")
+        filepath=os.path.join(env_out_dir,os.path.basename(env[:-4])+".usd")
+        temp_filepath = os.path.join(args.temp_dir,os.path.basename(env[:-4])+".usd")
 
         if args.limit_names == "":
             export_environment(temp_filepath, filepath, args.export_usd != "False", join_all=(args.join_all != "False"))

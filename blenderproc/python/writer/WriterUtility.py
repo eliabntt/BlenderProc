@@ -117,13 +117,13 @@ def export_environment(temp_filepath, filepath, export_usd=True, limit_names = [
     np.save(filepath[:-3] + "npy", [mx, my, max(fz, mz), MX, MY, MZ, my_hull])
     print(filepath)
 
-bpy.ops.object.select_by_type(type='MESH')
-for obj in bpy.data.objects:
-    if obj.type == 'MESH':
-        bpy.context.view_layer.objects.active = obj
-        break
-    if join_all:
-        bpy.ops.object.join()
+    bpy.ops.object.select_by_type(type='MESH')
+    for obj in bpy.data.objects:
+        if obj.type == 'MESH':
+            bpy.context.view_layer.objects.active = obj
+            break
+        if join_all==True:
+            bpy.ops.object.join()
 
     bpy.ops.export_mesh.stl(filepath=filepath[:-3] + "stl", use_selection=True, global_scale=1, ascii=False,
                             use_mesh_modifiers=True, batch_mode='OFF', axis_forward='Y', axis_up='Z')
