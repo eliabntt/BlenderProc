@@ -47,6 +47,11 @@ An example on how to do that can be found [here](https://github.com/eliabntt/Fro
 
 Important arguments are the `join_all` which will be used to create a monolithic mesh during the export, which may cause crashing of the program for large environments, and `limit_names` used to compute the boundaries of the environment.
 
+Then simply run 
+```python cli.py debug examples\datasets\front_3d_with_improved_mat\my_env_exporter.py --env RuralAustralia_Example_02.fbx --output_dir D:\env2 --temp_dir D:\temp_dir2 --limit_names Landscape --custom-blender-path=ov\pkg\blender-3.4.0-usd.101.0\Release`
+
+We tested this with the BenchBot USD environments.
+
 ### How to get the environment for GRADE
 
 Either use the fbx converter or export manually your own environment.
