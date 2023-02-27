@@ -5,7 +5,7 @@ _____
 
 Please check the official [repo](https://github.com/DLR-RM/BlenderProc/) if you have any problem with this code. I only modified some files.
 
-Follow the installation instructions you can find [here](https://github.com/DLR-RM/BlenderProc/tree/a1af9a). I diverged at commit [a1af9a](https://github.com/eliabntt/Front3D_to_USD/commit/a1af9a80cc9fb02116445dd04f95ba073cdf1ed2). We did NOT test any updated version.
+Follow the installation instructions you can find [here](https://github.com/DLR-RM/BlenderProc/tree/a1af9a#git-clone). I diverged at commit [a1af9a](https://github.com/eliabntt/Front3D_to_USD/commit/a1af9a80cc9fb02116445dd04f95ba073cdf1ed2). We did NOT test any updated version.
 ______
 
 This repository was used within the [GRADE](https://eliabntt.github.io/GRADE-RR/) project to generate the FRONT 3D environments.
