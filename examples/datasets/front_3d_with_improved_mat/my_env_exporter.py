@@ -14,6 +14,7 @@ parser.add_argument("--temp_dir", help="Path to where the data should be tempora
 parser.add_argument("--export_usd", default="False", help="Wether to export the usd or not")
 parser.add_argument("--join_all", default="False", help="Wether to join all assets. Default to false to avoid crashes")
 parser.add_argument("--limit_names", default="",nargs='?', help="Obj names to be used for computing limits separated by space, if empty use \"floor\" and \"wall\"")
+parser.add_argument("--exclude_limit_names", default="",nargs='?', help="Obj names to be used for computing limits separated by space, if empty use \"floor\" and \"wall\"")
 args = parser.parse_args()
 
 env_out_dir = args.output_dir
@@ -32,18 +33,29 @@ with open(os.path.join(env_out_dir, f"out.txt"), "w") as file_out, open(
     try:
         sys.stdout = file_out
         sys.stderr = file_err
-        bpy.ops.import_scene.fbx(filepath=env)
-
+        if ".fbx" == env[-4:]:
+            bpy.ops.import_scene.fbx(filepath=env)
+        elif ".usd" == env[-4:]:
+            bpy.ops.wm.usd_import(filepath=env, relative_path=True)
+        bpy.context.scene.unit_settings.scale_length = 0.01
+        
         filepath=os.path.join(env_out_dir,os.path.basename(env[:-4])+".usd")
         temp_filepath = os.path.join(args.temp_dir,os.path.basename(env[:-4])+".usd")
-
+        for o in bpy.context.scene.objects:
+            if "sky" in o.name.lower():
+                o.select_set(True)
+            else:
+                o.select_set(False)
+        bpy.ops.object.delete()
+        
         if args.limit_names == "":
             export_environment(temp_filepath, filepath, args.export_usd != "False", join_all=(args.join_all != "False"))
         else:
-            export_environment(temp_filepath, filepath, args.export_usd != "False", str.split(args.limit_names), args.join_all != "False")
+            export_environment(temp_filepath, filepath, args.export_usd != "False", str.split(args.limit_names), args.join_all != "False", exclude_names=([] if len(args.exclude_limit_names) == 0 else str.split(args.exclude_limit_names)))
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete()
         succeed = True
+   
     except:
         import traceback
         sys.stderr.write('error\n')

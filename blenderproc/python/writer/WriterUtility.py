@@ -20,7 +20,13 @@ import shutil
 import math
 from scipy.spatial import ConvexHull
 
-def export_environment(temp_filepath, filepath, export_usd=True, limit_names = ["wall", "floor"], join_all=True):
+def check_exclude(obj_name, exclude_names):
+    for en in exclude_names:
+        if obj_name == en.lower():
+            return True
+    return False
+
+def export_environment(temp_filepath, filepath, export_usd=True, limit_names = ["wall", "floor"], join_all=True, exclude_names = []):
     if export_usd:
         bpy.ops.wm.usd_export(filepath=temp_filepath,
                               filemode=8, display_type='DEFAULT', sort_method='DEFAULT',
@@ -64,7 +70,7 @@ def export_environment(temp_filepath, filepath, export_usd=True, limit_names = [
         if obj.type == 'MESH':
             # use only walls and floors, some objects might be wrongly outside
             for name in limit_names:
-                if name in obj.name.lower():
+                if name.lower() in obj.name.lower() and not check_exclude(obj.name.lower(), exclude_names):
                     for v in obj.data.vertices:
                         l = obj.matrix_world @ v.co
                         pts.append([l[0], l[1]])
