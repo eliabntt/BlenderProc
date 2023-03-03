@@ -1,5 +1,7 @@
 # Front3D to USD batch processer based on BlenderProc2
 
+## This repository is part of the [GRADE](https://eliabntt.github.io/GRADE-RR/home) project
+
 _____
 ### Disclaimer:
 
@@ -90,9 +92,14 @@ There are other minor edits regarding AMASS (to be able to load a sequence) but 
 
 All changes can be found [here](https://github.com/DLR-RM/BlenderProc/compare/main...eliabntt:Front3D_to_USD:c0e2e44#).
 
-## Citation
+__________
+### CITATION
+If you find this work useful please cite our work as
 
-If you find this work useful please consider citing...
+```
 
-## License
-By using this software or any of its derivation, including the data, you are implicitly accepting all the corresponding licenses, including but not limited to, the ones from BlenderProc, GRADE-RR, GRADE, 3D Front, 3D Future, ambientcg, MPI-PS.
+```
+_________
+### Licensing
+
+If you use this work you acknowledge both BlenderProc and GRADE-RR licensing terms.
